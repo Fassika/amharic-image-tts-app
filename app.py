@@ -45,6 +45,30 @@ def process_image(img, brightness=0, contrast=1.0, crop_left=0.0, crop_top=0.0, 
     adjusted = cv2.convertScaleAbs(cropped, alpha=contrast, beta=brightness)
     return adjusted
 
+def draw_crop_overlay(img, crop_left, crop_top, crop_right, crop_bottom):
+    """Draw a semi-transparent crop overlay on the image for preview."""
+    height, width = img.shape[:2]
+    x1 = int(width * crop_left)
+    y1 = int(height * crop_top)
+    x2 = int(width * (1 - crop_right))
+    y2 = int(height * (1 - crop_bottom))
+    
+    # Ensure valid bounds
+    x1 = max(0, min(x1, x2, width))
+    y1 = max(0, min(y1, y2, height))
+    x2 = max(x1, min(x2, width))
+    y2 = max(y1, min(y2, height))
+    
+    overlay = img.copy()
+    # Draw semi-transparent rectangle outside crop area
+    cv2.rectangle(overlay, (0, 0), (width, height), (0, 0, 0), -1)  # Black overlay
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 0), -1)  # Clear inside crop
+    overlay = cv2.addWeighted(img, 0.7, overlay, 0.3, 0)  # Blend
+    
+    # Draw border for crop area
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    return overlay
+
 # Streamlit app
 st.title("Amharic Text-to-Speech from Image")
 st.info("Internet connection required for audio generation using Google TTS.")
@@ -89,6 +113,11 @@ if image:
     
     if st.session_state.show_editor:
         with st.expander("Image Editor", expanded=True):
+            # Load image for preview
+            image_bytes = image.getvalue()
+            np_arr = np.frombuffer(image_bytes, np.uint8)
+            preview_img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            
             # Brightness and Contrast
             col1, col2 = st.columns(2)
             with col1:
@@ -105,12 +134,16 @@ if image:
                 st.session_state.crop_right = st.slider("Crop Right (%)", 0.0, 50.0, st.session_state.crop_right, step=1.0) / 100.0
                 st.session_state.crop_bottom = st.slider("Crop Bottom (%)", 0.0, 50.0, st.session_state.crop_bottom, step=1.0) / 100.0
             
+            # Real-time preview with crop overlay (updates on slider change)
+            preview_overlay = draw_crop_overlay(preview_img, st.session_state.crop_left, st.session_state.crop_top,
+                                               st.session_state.crop_right, st.session_state.crop_bottom)
+            # Apply brightness/contrast to preview for full effect
+            preview_adjusted = cv2.convertScaleAbs(preview_overlay, alpha=st.session_state.contrast, beta=st.session_state.brightness)
+            st.image(preview_adjusted, caption="Live Preview (Green box shows crop area)", use_container_width=True)
+            
             if st.button("Apply Edits"):
-                image_bytes = image.getvalue()
-                np_arr = np.frombuffer(image_bytes, np.uint8)
-                img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
                 st.session_state.edited_img = process_image(
-                    img,
+                    preview_img,
                     brightness=st.session_state.brightness,
                     contrast=st.session_state.contrast,
                     crop_left=st.session_state.crop_left,
@@ -118,11 +151,12 @@ if image:
                     crop_right=st.session_state.crop_right,
                     crop_bottom=st.session_state.crop_bottom
                 )
+                st.success("Edits applied!")
                 st.rerun()
             
-            # Show preview if edits applied
+            # Show final edited preview if applied
             if st.session_state.edited_img is not None:
-                st.image(st.session_state.edited_img, caption="Edited Image Preview", use_container_width=True)
+                st.image(st.session_state.edited_img, caption="Applied Edited Image", use_container_width=True)
     
     # Use edited image if available, else original
     if st.session_state.edited_img is not None:
