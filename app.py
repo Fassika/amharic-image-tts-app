@@ -68,8 +68,6 @@ if image:
             
             with col1:
                 if st.button("Read"):
-                    st.write("Extracted text:", extracted_text)
-                    st.write("Speed:", speed)
                     with st.spinner("Generating audio..."):
                         try:
                             audio_bytes = generate_audio_bytes(extracted_text, speed)
