@@ -9,7 +9,6 @@ import tempfile
 import os
 
 
-
 async def generate_audio_async(text, voice, rate_str, output_path):
     """Async function to generate audio using edge-tts."""
     communicate = edge_tts.Communicate(text, voice, rate=rate_str)
@@ -37,23 +36,8 @@ def generate_audio_bytes(text, voice, speed):
     
     return audio_bytes
 
-def deskew_image(image):
-    """Corrects image skew to align text."""
-    coords = np.column_stack(np.where(image > 0))
-    angle = cv2.minAreaRect(coords)[-1]
-    if angle < -45:
-        angle = -(90 + angle)
-    else:
-        angle = -angle
-    (h, w) = image.shape[:2]
-    center = (w // 2, h // 2)
-    M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-    return rotated
-
 # Streamlit app
 st.title("Amharic Text-to-Speech from Image")
-st.info("Internet connection required for audio generation.")
 
 input_method = st.selectbox("Choose input method", ["Upload Image File", "Take Photo with Camera"])
 
@@ -68,6 +52,7 @@ elif input_method == "Take Photo with Camera":
         image = camera_image
 
 if image:
+    # Display the original image (updated line)
     st.image(image, caption="Input Image", use_container_width=True)
     
     image_bytes = image.getvalue()
@@ -77,41 +62,16 @@ if image:
     if img is None:
         st.error("Failed to load image. Please try another file.")
     else:
-        # Enhanced preprocessing
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
-        # Increase contrast
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        contrast = clahe.apply(gray)
-        
-        # Bilateral filter
-        filtered = cv2.bilateralFilter(contrast, d=9, sigmaColor=75, sigmaSpace=75)
-        
-        # Adaptive thresholding
+        filtered = cv2.bilateralFilter(gray, d=9, sigmaColor=75, sigmaSpace=75)
         thresh = cv2.adaptiveThreshold(filtered, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 10)
         
-        # Morphological operation to remove small noise
-        kernel = np.ones((3, 3), np.uint8)
-        morph = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
+        pil_image = Image.fromarray(thresh)
         
-        # Deskew image
-        deskewed = deskew_image(morph)
-        
-        # Resize image to improve OCR (target ~300 DPI equivalent)
-        scale_factor = 2.0
-        resized = cv2.resize(deskewed, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_CUBIC)
-        
-        # Display preprocessed image for debugging
-        with st.expander("View Preprocessed Image (Debug)"):
-            preprocessed_pil = Image.fromarray(resized)
-            st.image(preprocessed_pil, caption="Preprocessed Image", use_container_width=True)
-        
-        # Extract text with Tesseract config optimized for Amharic
-        custom_config = r'--oem 3 --psm 6 -l amh'
-        extracted_text = pytesseract.image_to_string(resized, config=custom_config).strip()
+        extracted_text = pytesseract.image_to_string(pil_image, lang='amh').strip()
         
         if not extracted_text:
-            st.warning("No text extracted from the image. Try a clearer image or adjust preprocessing.")
+            st.warning("No text extracted from the image. Try a clearer image.")
         else:
             st.subheader("Extracted Amharic Text")
             st.text_area("Text", extracted_text, height=150)
@@ -120,14 +80,6 @@ if image:
             voice_code = "am-ET-AmehaNeural" if voice_option == "Male" else "am-ET-MekdesNeural"
             
             speed = st.slider("Reading Speed", min_value=0.5, max_value=2.0, value=1.0, step=0.1)
-            
-            # Compute rate_str for debugging
-            if speed == 1.0:
-                rate_str = "+0%"
-            elif speed > 1.0:
-                rate_str = f"+{int((speed - 1) * 100)}%"
-            else:
-                rate_str = f"-{int((1 - speed) * 100)}%"
             
             col1, col2 = st.columns(2)
             
