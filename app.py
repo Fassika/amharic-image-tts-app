@@ -8,7 +8,6 @@ import asyncio
 import tempfile
 import os
 
-
 async def generate_audio_async(text, voice, rate_str, output_path):
     """Async function to generate audio using edge-tts."""
     communicate = edge_tts.Communicate(text, voice, rate=rate_str)
@@ -86,11 +85,16 @@ if image:
             with col1:
                 if st.button("Read"):
                     with st.spinner("Generating audio..."):
+                        st.write("Extracted text:", extracted_text)
+                        st.write("Voice code:", voice_code)
+                        st.write("Speed:", speed, "Rate:", rate_str)
+                        
                         audio_bytes = generate_audio_bytes(extracted_text, voice_code, speed)
-                    if audio_bytes:
-                        st.audio(audio_bytes, format="audio/mp3")
-                    else:
-                        st.error("Failed to generate audio.")
+                if audio_bytes:
+                    st.audio(audio_bytes, format="audio/mp3")
+                else:
+                    st.error("Failed to generate audio.")
+            
             
             with col2:
                 if st.button("Save to File"):
@@ -108,3 +112,5 @@ if image:
                         st.error("Failed to generate audio.")
 else:
     st.info("Please provide an image to proceed.")
+    
+    
