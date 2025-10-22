@@ -5,3 +5,4 @@ pytesseract
 edge-tts
 numpy
 asyncio
+gtts
