@@ -85,6 +85,14 @@ if image:
             
             with col1:
                 if st.button("Read"):
+                    # Compute rate_str inside the button for scoping
+                    if speed == 1.0:
+                        rate_str = "+0%"
+                    elif speed > 1.0:
+                        rate_str = f"+{int((speed - 1) * 100)}%"
+                    else:
+                        rate_str = f"-{int((1 - speed) * 100)}%"
+                    
                     st.write("Extracted text:", extracted_text)
                     st.write("Voice code:", voice_code)
                     st.write("Speed:", speed, "Rate:", rate_str)
