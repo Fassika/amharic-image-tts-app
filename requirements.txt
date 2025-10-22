@@ -4,3 +4,4 @@ pillow
 pytesseract
 numpy
 gtts
+pdf2image
