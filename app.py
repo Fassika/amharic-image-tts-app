@@ -20,6 +20,31 @@ def generate_audio_bytes(text, speed):
         os.remove(tmp_path)
     return audio_bytes
 
+def process_image(img, brightness=0, contrast=1.0, crop_left=0.0, crop_top=0.0, crop_right=0.0, crop_bottom=0.0):
+    """Apply cropping, then brightness and contrast adjustments to the image."""
+    height, width = img.shape[:2]
+    
+    # Apply cropping
+    x1 = int(width * crop_left)
+    y1 = int(height * crop_top)
+    x2 = int(width * (1 - crop_right))
+    y2 = int(height * (1 - crop_bottom))
+    
+    # Ensure valid crop bounds
+    x1 = max(0, min(x1, x2, width))
+    y1 = max(0, min(y1, y2, height))
+    x2 = max(x1, min(x2, width))
+    y2 = max(y1, min(y2, height))
+    
+    cropped = img[y1:y2, x1:x2]
+    
+    if cropped.size == 0:
+        return img  # Fallback to original if crop is invalid
+    
+    # Apply brightness and contrast
+    adjusted = cv2.convertScaleAbs(cropped, alpha=contrast, beta=brightness)
+    return adjusted
+
 # Streamlit app
 st.title("Amharic Text-to-Speech from Image")
 st.info("Internet connection required for audio generation using Google TTS.")
@@ -40,14 +65,77 @@ if image:
     # Display the original image
     st.image(image, caption="Input Image", use_container_width=True)
     
-    image_bytes = image.getvalue()
-    np_arr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    # Initialize session state for editing
+    if 'show_editor' not in st.session_state:
+        st.session_state.show_editor = False
+    if 'edited_img' not in st.session_state:
+        st.session_state.edited_img = None
+    if 'brightness' not in st.session_state:
+        st.session_state.brightness = 0
+    if 'contrast' not in st.session_state:
+        st.session_state.contrast = 1.0
+    if 'crop_left' not in st.session_state:
+        st.session_state.crop_left = 0.0
+    if 'crop_top' not in st.session_state:
+        st.session_state.crop_top = 0.0
+    if 'crop_right' not in st.session_state:
+        st.session_state.crop_right = 0.0
+    if 'crop_bottom' not in st.session_state:
+        st.session_state.crop_bottom = 0.0
     
-    if img is None:
+    # Button to toggle editor
+    if st.button("Edit Image"):
+        st.session_state.show_editor = not st.session_state.show_editor
+    
+    if st.session_state.show_editor:
+        with st.expander("Image Editor", expanded=True):
+            # Brightness and Contrast
+            col1, col2 = st.columns(2)
+            with col1:
+                st.session_state.brightness = st.slider("Brightness", -100, 100, st.session_state.brightness)
+            with col2:
+                st.session_state.contrast = st.slider("Contrast", 0.1, 3.0, st.session_state.contrast, step=0.1)
+            
+            # Cropping
+            crop_col1, crop_col2 = st.columns(2)
+            with crop_col1:
+                st.session_state.crop_left = st.slider("Crop Left (%)", 0.0, 50.0, st.session_state.crop_left, step=1.0) / 100.0
+                st.session_state.crop_top = st.slider("Crop Top (%)", 0.0, 50.0, st.session_state.crop_top, step=1.0) / 100.0
+            with crop_col2:
+                st.session_state.crop_right = st.slider("Crop Right (%)", 0.0, 50.0, st.session_state.crop_right, step=1.0) / 100.0
+                st.session_state.crop_bottom = st.slider("Crop Bottom (%)", 0.0, 50.0, st.session_state.crop_bottom, step=1.0) / 100.0
+            
+            if st.button("Apply Edits"):
+                image_bytes = image.getvalue()
+                np_arr = np.frombuffer(image_bytes, np.uint8)
+                img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                st.session_state.edited_img = process_image(
+                    img,
+                    brightness=st.session_state.brightness,
+                    contrast=st.session_state.contrast,
+                    crop_left=st.session_state.crop_left,
+                    crop_top=st.session_state.crop_top,
+                    crop_right=st.session_state.crop_right,
+                    crop_bottom=st.session_state.crop_bottom
+                )
+                st.rerun()
+            
+            # Show preview if edits applied
+            if st.session_state.edited_img is not None:
+                st.image(st.session_state.edited_img, caption="Edited Image Preview", use_container_width=True)
+    
+    # Use edited image if available, else original
+    if st.session_state.edited_img is not None:
+        img_to_process = st.session_state.edited_img
+    else:
+        image_bytes = image.getvalue()
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img_to_process = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    
+    if img_to_process is None:
         st.error("Failed to load image. Please try another file.")
     else:
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(img_to_process, cv2.COLOR_BGR2GRAY)
         filtered = cv2.bilateralFilter(gray, d=9, sigmaColor=75, sigmaSpace=75)
         thresh = cv2.adaptiveThreshold(filtered, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 10)
         
