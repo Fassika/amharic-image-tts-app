@@ -2,7 +2,5 @@ streamlit
 opencv-python-headless
 pillow
 pytesseract
-edge-tts
 numpy
-asyncio
 gtts
