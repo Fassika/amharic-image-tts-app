@@ -7,7 +7,7 @@ import edge_tts
 import asyncio
 import tempfile
 import os
-
+from gtts import gTTS  # Fallback TTS
 
 async def generate_audio_async(text, voice, rate_str, output_path):
     """Async function to generate audio using edge-tts."""
@@ -15,7 +15,7 @@ async def generate_audio_async(text, voice, rate_str, output_path):
     await communicate.save(output_path)
 
 def generate_audio_bytes(text, voice, speed):
-    """Generate audio and return as bytes."""
+    """Generate audio using edge-tts, with gTTS fallback."""
     if speed == 1.0:
         rate_str = "+0%"
     elif speed > 1.0:
@@ -30,10 +30,26 @@ def generate_audio_bytes(text, voice, speed):
         asyncio.run(generate_audio_async(text, voice, rate_str, tmp_path))
         with open(tmp_path, 'rb') as f:
             audio_bytes = f.read()
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-    
+        os.remove(tmp_path)
+        return audio_bytes
+    except Exception as e:
+        if "NoAudioReceived" in str(e):
+            st.warning("Edge TTS failed (Microsoft service issue). Falling back to Google TTS (basic Amharic voice).")
+            return generate_audio_gtts(text, speed)
+        else:
+            raise e  # Re-raise other errors
+
+def generate_audio_gtts(text, speed):
+    """Fallback: Generate audio using gTTS (basic Amharic support)."""
+    # gTTS doesn't support rate directly; approximate with slow=True for slower speeds
+    slow = speed < 1.0
+    tts = gTTS(text=text, lang='am', slow=slow)
+    with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp_file:
+        tmp_path = tmp_file.name
+        tts.save(tmp_path)
+        with open(tmp_path, 'rb') as f:
+            audio_bytes = f.read()
+        os.remove(tmp_path)
     return audio_bytes
 
 # Streamlit app
